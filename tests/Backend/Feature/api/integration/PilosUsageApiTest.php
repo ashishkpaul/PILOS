@@ -314,6 +314,87 @@ public function test_statistics_returns_meeting_and_room_association(): void
         ->assertJsonPath('data.statistics.0.video_count', 1);
 }
 
+public function test_rooms_pagination_accepts_max_page_size(): void
+{
+    Room::factory()->count(21)->create();
+
+    $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['per_page' => 20]))
+        ->assertSuccessful()
+        ->assertJsonCount(20, 'data')
+        ->assertJsonPath('per_page', 20)
+        ->assertJsonPath('total', 21);
+}
+
+public function test_rooms_pagination_across_pages(): void
+{
+    $rooms = Room::factory()->count(21)->create();
+    $roomIds = $rooms->pluck('id');
+
+    $pageOne = $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['per_page' => 20]))
+        ->assertSuccessful()
+        ->assertJsonCount(20, 'data')
+        ->assertJsonPath('per_page', 20)
+        ->assertJsonPath('total', 21)
+        ->assertJsonPath('last_page', 2);
+
+    $pageTwo = $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['per_page' => 20, 'page' => 2]))
+        ->assertSuccessful()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('per_page', 20)
+        ->assertJsonPath('total', 21)
+        ->assertJsonPath('last_page', 2);
+
+    $pageOneIds = collect($pageOne->json('data'))->pluck('id');
+    $pageTwoIds = collect($pageTwo->json('data'))->pluck('id');
+
+    $this->assertEmpty($pageOneIds->intersect($pageTwoIds));
+    $this->assertSame(count($roomIds), $pageOneIds->merge($pageTwoIds)->unique()->count());
+}
+
+public function test_rooms_pagination_single_record(): void
+{
+    Room::factory()->count(5)->create();
+
+    $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['per_page' => 1]))
+        ->assertSuccessful()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('per_page', 1)
+        ->assertJsonPath('total', 5)
+        ->assertJsonPath('last_page', 5);
+}
+
+public function test_rooms_pagination_rejects_per_page_over_max(): void
+{
+    $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['per_page' => 21]))
+        ->assertStatus(422);
+}
+
+public function test_rooms_pagination_rejects_zero_per_page(): void
+{
+    $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['per_page' => 0]))
+        ->assertStatus(422);
+}
+
+public function test_rooms_pagination_rejects_zero_page(): void
+{
+    $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['page' => 0]))
+        ->assertStatus(422);
+}
+
+public function test_rooms_pagination_rejects_non_integer_pagination(): void
+{
+    $this->withToken($this->token(['pilos.rooms.read']))
+        ->getJson(route('api.integration.v1.rooms.index', ['page' => 'abc', 'per_page' => 'xyz']))
+        ->assertStatus(422);
+}
+
 public function test_statistics_feature_disabled_returns_468(): void
 {
     $meeting = Meeting::factory()->create([
@@ -329,6 +410,148 @@ public function test_statistics_feature_disabled_returns_468(): void
             'meeting' => $meeting->id,
         ]))
         ->assertStatus(468);
+}
+
+public function test_meetings_pagination_accepts_max_page_size(): void
+{
+    $room = Room::factory()->create();
+    Meeting::factory()->count(21)->create(['room_id' => $room->id]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', ['room' => $room->id, 'per_page' => 20]))
+        ->assertSuccessful()
+        ->assertJsonCount(20, 'data')
+        ->assertJsonPath('per_page', 20)
+        ->assertJsonPath('total', 21);
+}
+
+public function test_meetings_pagination_across_pages(): void
+{
+    $room = Room::factory()->create();
+    $meetings = Meeting::factory()->count(21)->create(['room_id' => $room->id]);
+    $meetingIds = $meetings->pluck('id');
+
+    $pageOne = $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', ['room' => $room->id, 'per_page' => 20]))
+        ->assertSuccessful()
+        ->assertJsonCount(20, 'data')
+        ->assertJsonPath('total', 21)
+        ->assertJsonPath('last_page', 2);
+
+    $pageTwo = $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', ['room' => $room->id, 'per_page' => 20, 'page' => 2]))
+        ->assertSuccessful()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('total', 21)
+        ->assertJsonPath('last_page', 2);
+
+    $pageOneIds = collect($pageOne->json('data'))->pluck('id');
+    $pageTwoIds = collect($pageTwo->json('data'))->pluck('id');
+
+    $this->assertEmpty($pageOneIds->intersect($pageTwoIds));
+    $this->assertSame(count($meetingIds), $pageOneIds->merge($pageTwoIds)->unique()->count());
+}
+
+public function test_meetings_pagination_sort_asc(): void
+{
+    $room = Room::factory()->create();
+    $earlier = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'start' => now()->subHour(),
+        'end' => now()->subMinutes(30),
+    ]);
+    $later = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'start' => now()->subMinutes(10),
+        'end' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+            'sort_direction' => 'asc',
+            'per_page' => 20,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.id', (string) $earlier->id)
+        ->assertJsonPath('data.1.id', (string) $later->id);
+}
+
+public function test_meetings_pagination_sort_desc(): void
+{
+    $room = Room::factory()->create();
+    $earlier = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'start' => now()->subHour(),
+        'end' => now()->subMinutes(30),
+    ]);
+    $later = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'start' => now()->subMinutes(10),
+        'end' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+            'sort_direction' => 'desc',
+            'per_page' => 20,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.id', (string) $later->id)
+        ->assertJsonPath('data.1.id', (string) $earlier->id);
+}
+
+public function test_meetings_pagination_rejects_invalid_sort_direction(): void
+{
+    $room = Room::factory()->create();
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+            'sort_direction' => 'invalid',
+        ]))
+        ->assertStatus(422);
+}
+
+public function test_meetings_pagination_rejects_per_page_over_max(): void
+{
+    $room = Room::factory()->create();
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+            'per_page' => 21,
+        ]))
+        ->assertStatus(422);
+}
+
+public function test_meetings_pagination_rejects_zero_page(): void
+{
+    $room = Room::factory()->create();
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+            'page' => 0,
+        ]))
+        ->assertStatus(422);
+}
+
+public function test_meetings_pagination_beyond_final_page_returns_empty(): void
+{
+    $room = Room::factory()->create();
+    Meeting::factory()->count(3)->create(['room_id' => $room->id]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+            'per_page' => 1,
+            'page' => 5,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonCount(0, 'data')
+        ->assertJsonPath('total', 3);
 }
 
 }
