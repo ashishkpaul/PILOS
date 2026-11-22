@@ -266,16 +266,18 @@ Requests for a page beyond the final page return 200 with an empty `data` array.
 
 ## Error responses
 
-PilOS intentionally returns custom status codes for some business conditions, not standard HTTP codes:
+PILOS intentionally returns custom status codes for some business conditions, not standard HTTP codes:
 
 | Code | Condition | Endpoint(s) |
 | --- | --- | --- |
 | 401 | Unauthenticated, expired token, or revoked token | All |
 | 403 | Missing permission, missing ability, wildcard token, or null expiry | All |
 | 404 | Unknown room or meeting | Meetings list, attendance, statistics |
-| 409 | Meeting not yet ended (custom 469) | Attendance, statistics |
-| 409 | Attendance recording disabled (custom 470) | Attendance |
+| 409 | Meeting not yet ended | Statistics |
 | 409 | Incomplete attendance records (missing leave or missing identity) | Attendance |
+| 468 | Statistics feature disabled | Statistics |
+| 469 | Meeting not yet ended | Attendance |
+| 470 | Attendance recording disabled | Attendance |
 | 422 | Invalid pagination parameters | Rooms list, meetings list |
 
 All error responses use Laravel's standard JSON validation/error format.
