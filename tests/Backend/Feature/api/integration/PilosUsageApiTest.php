@@ -554,4 +554,37 @@ public function test_meetings_pagination_beyond_final_page_returns_empty(): void
         ->assertJsonPath('total', 3);
 }
 
+public function test_meetings_for_unknown_room_returns_not_found(): void
+{
+    $unknownRoomId = '00000000-0000-4000-8000-000000000001';
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $unknownRoomId,
+        ]))
+        ->assertNotFound();
+}
+
+public function test_attendance_for_unknown_meeting_returns_not_found(): void
+{
+    $unknownMeetingId = '00000000-0000-4000-8000-000000000002';
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $unknownMeetingId,
+        ]))
+        ->assertNotFound();
+}
+
+public function test_statistics_for_unknown_meeting_returns_not_found(): void
+{
+    $unknownMeetingId = '00000000-0000-4000-8000-000000000003';
+
+    $this->withToken($this->token(['pilos.statistics.read']))
+        ->getJson(route('api.integration.v1.meetings.statistics', [
+            'meeting' => $unknownMeetingId,
+        ]))
+        ->assertNotFound();
+}
+
 }
