@@ -159,14 +159,18 @@ $participantKeys = $participantKeys->unique();
             ]);
 
         return response()->json([
-            'data' => $statistics->map(fn ($statistic): array => [
-                'id' => $statistic->id,
-                'participant_count' => $statistic->participant_count,
-                'listener_count' => $statistic->listener_count,
-                'voice_participant_count' => $statistic->voice_participant_count,
-                'video_count' => $statistic->video_count,
-                'created_at' => $statistic->created_at?->toISOString(),
-            ])->values(),
+            'data' => [
+                'meeting_id' => (string) $meeting->id,
+                'room_id' => (string) $meeting->room_id,
+                'statistics' => $statistics->map(fn ($statistic): array => [
+                    'id' => $statistic->id,
+                    'participant_count' => $statistic->participant_count,
+                    'listener_count' => $statistic->listener_count,
+                    'voice_participant_count' => $statistic->voice_participant_count,
+                    'video_count' => $statistic->video_count,
+                    'created_at' => $statistic->created_at?->toISOString(),
+                ])->values(),
+            ],
         ]);
     }
 

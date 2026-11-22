@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Backend\Feature\api\integration;
 
 use App\Models\Meeting;
+use App\Models\MeetingStat;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Room;
 use App\Models\User;
+use App\Settings\RecordingSettings;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Backend\TestCase;
@@ -279,6 +281,54 @@ public function test_statistics_for_meeting_that_has_not_ended_are_rejected(): v
             'meeting' => $meeting->id,
         ]))
         ->assertStatus(409);
+}
+
+public function test_statistics_returns_meeting_and_room_association(): void
+{
+    $room = Room::factory()->create();
+    $meeting = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    MeetingStat::create([
+        'meeting_id' => $meeting->id,
+        'participant_count' => 5,
+        'listener_count' => 3,
+        'voice_participant_count' => 2,
+        'video_count' => 1,
+        'created_at' => now()->subMinutes(10),
+    ]);
+
+    $this->withToken($this->token(['pilos.statistics.read']))
+        ->getJson(route('api.integration.v1.meetings.statistics', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.meeting_id', (string) $meeting->id)
+        ->assertJsonPath('data.room_id', (string) $room->id)
+        ->assertJsonPath('data.statistics.0.participant_count', 5)
+        ->assertJsonPath('data.statistics.0.listener_count', 3)
+        ->assertJsonPath('data.statistics.0.voice_participant_count', 2)
+        ->assertJsonPath('data.statistics.0.video_count', 1);
+}
+
+public function test_statistics_feature_disabled_returns_468(): void
+{
+    $meeting = Meeting::factory()->create([
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    app(RecordingSettings::class)->meeting_usage_enabled = false;
+    app(RecordingSettings::class)->save();
+
+    $this->withToken($this->token(['pilos.statistics.read']))
+        ->getJson(route('api.integration.v1.meetings.statistics', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertStatus(468);
 }
 
 }
