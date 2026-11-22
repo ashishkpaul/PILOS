@@ -38,7 +38,17 @@ class RequirePilosIntegrationToken
             abort(403, 'The PILOS integration account is not authorized.');
         }
 
-        if (! $token->can($ability)) {
+        $abilities = $token->abilities;
+
+        if (! is_array($abilities) || in_array('*', $abilities, true)) {
+            abort(403, 'Integration tokens must not use wildcard abilities.');
+        }
+
+        if ($token->expires_at === null) {
+            abort(403, 'Integration tokens must have an expiration date.');
+        }
+
+        if (! in_array($ability, $abilities, true)) {
             abort(403, 'The access token does not have the required ability.');
         }
 

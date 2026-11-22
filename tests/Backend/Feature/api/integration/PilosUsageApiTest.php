@@ -797,4 +797,100 @@ public function test_attendance_endpoint_equal_join_leave_returns_zero_seconds()
         ->assertJsonPath('data.attendee_seconds', 0);
 }
 
+public function test_token_with_future_expiry_is_accepted(): void
+{
+    $token = $this->integrationUser->createToken(
+        'saa9vi-future-expiry',
+        ['pilos.rooms.read'],
+        now()->addHour()
+    )->plainTextToken;
+
+    $this->withToken($token)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertSuccessful();
+}
+
+public function test_token_without_explicit_expiry_is_rejected(): void
+{
+    $token = $this->integrationUser
+        ->createToken(
+            'saa9vi-no-expiry',
+            ['pilos.rooms.read'],
+            null
+        )
+        ->plainTextToken;
+
+    $this->withToken($token)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertForbidden();
+}
+
+public function test_revoked_token_is_rejected(): void
+{
+    $plainTextToken = $this->token(['pilos.rooms.read']);
+
+    $this->integrationUser->tokens()->latest('id')->firstOrFail()->delete();
+
+    $this->withToken($plainTextToken)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertUnauthorized();
+}
+
+public function test_token_rotation_invalidates_old_token(): void
+{
+    $oldTokenPlain = $this->token(['pilos.rooms.read']);
+    $oldTokenId = $this->integrationUser->tokens()->latest('id')->first()->id;
+
+    $newToken = $this->integrationUser->createToken(
+        'saa9vi-rotated',
+        ['pilos.rooms.read'],
+        now()->addHour()
+    )->plainTextToken;
+
+    $this->integrationUser->tokens()->where('id', $oldTokenId)->delete();
+
+    // Revoked old token is rejected.
+    $this->withToken($oldTokenPlain)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertUnauthorized();
+
+    // New token still works.
+    $this->withToken($newToken)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertSuccessful();
+}
+
+public function test_user_loses_integration_permission_is_rejected(): void
+{
+    $token = $this->token(['pilos.rooms.read']);
+
+    $this->integrationUser->roles()->detach();
+
+    $this->withToken($token)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertStatus(403);
+}
+
+public function test_token_missing_required_ability_is_rejected(): void
+{
+    $token = $this->token(['pilos.meetings.read']);
+
+    $this->withToken($token)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertStatus(403);
+}
+
+public function test_wildcard_token_is_rejected(): void
+{
+    $token = $this->integrationUser->createToken(
+        'saa9vi-wildcard',
+        ['*'],
+        now()->addHour()
+    )->plainTextToken;
+
+    $this->withToken($token)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertStatus(403);
+}
+
 }

@@ -8,6 +8,25 @@ COPY --chown=www-data:www-data \
   app/Http/Controllers/api/integration/v1/PilosUsageController.php \
   ./app/Http/Controllers/api/integration/v1/PilosUsageController.php
 
+# Include the current integration authentication middleware.
+COPY --chown=www-data:www-data \
+  app/Http/Middleware/RequirePilosIntegrationToken.php \
+  ./app/Http/Middleware/RequirePilosIntegrationToken.php
+
+# Include the updated scheduler.
+COPY --chown=www-data:www-data \
+  app/Console/Kernel.php \
+  ./app/Console/Kernel.php
+
+# Include the token expiry and expiry-index migrations.
+COPY --chown=www-data:www-data \
+  database/migrations/2026_11_22_120000_add_expires_at_to_personal_access_tokens_table.php \
+  ./database/migrations/2026_11_22_120000_add_expires_at_to_personal_access_tokens_table.php
+
+COPY --chown=www-data:www-data \
+  database/migrations/2026_11_22_130000_add_index_to_personal_access_tokens_expires_at.php \
+  ./database/migrations/2026_11_22_130000_add_index_to_personal_access_tokens_expires_at.php
+
 # Include PHPUnit configuration and feature tests.
 COPY --chown=www-data:www-data phpunit.xml ./phpunit.xml
 COPY --chown=www-data:www-data tests/ ./tests/
