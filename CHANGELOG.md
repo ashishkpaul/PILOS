@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Read-only usage integration API for importing room, meeting, and attendance aggregates
+
+### Security
+
+- Require finite expiry for integration tokens and prune expired tokens daily
+
 ## [v4.20.0] - 2026-11-09
 
 ### Changed
