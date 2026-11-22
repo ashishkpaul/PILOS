@@ -1,0 +1,284 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Backend\Feature\api\integration;
+
+use App\Models\Meeting;
+use App\Models\Permission;
+use App\Models\Role;
+use App\Models\Room;
+use App\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Backend\TestCase;
+
+class PilosUsageApiTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $integrationUser;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The PILOS deployment sets this in .env.pilos. Set it explicitly for
+        // the isolated test application so Sanctum resolves a real guard.
+        config(['sanctum.guard' => 'users']);
+
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $this->integrationUser = User::factory()->create();
+        $role = Role::factory()->create(['name' => 'Saa9vi integration']);
+        $permission = Permission::query()
+            ->where('name', 'pilos.integration.viewUsage')
+            ->firstOrFail();
+
+        $role->permissions()->attach($permission->id);
+        $this->integrationUser->roles()->attach($role->id);
+    }
+
+    private function token(array $abilities = ['pilos.rooms.read']): string
+    {
+        return $this->integrationUser
+            ->createToken('saa9vi-test', $abilities, now()->addHour())
+            ->plainTextToken;
+    }
+
+    public function test_integration_endpoint_requires_authentication(): void
+    {
+        $this->getJson(route('api.integration.v1.rooms.index'))
+            ->assertUnauthorized();
+    }
+
+    public function test_session_authentication_is_not_accepted_for_machine_routes(): void
+    {
+        $this->actingAs($this->integrationUser, 'users')
+            ->getJson(route('api.integration.v1.rooms.index'))
+            ->assertUnauthorized();
+    }
+
+    public function test_token_must_have_the_route_ability(): void
+    {
+        $this->withToken($this->token(['pilos.meetings.read']))
+            ->getJson(route('api.integration.v1.rooms.index'))
+            ->assertForbidden();
+    }
+
+    public function test_expired_personal_access_token_is_rejected(): void
+    {
+        $expiredToken = $this->integrationUser
+            ->createToken('saa9vi-expired-test', ['pilos.rooms.read'], now()->subMinute())
+            ->plainTextToken;
+
+        $this->withToken($expiredToken)
+            ->getJson(route('api.integration.v1.rooms.index'))
+            ->assertUnauthorized();
+    }
+
+    public function test_room_list_returns_only_minimal_binding_fields(): void
+    {
+        $room = Room::factory()->create(['name' => 'Saa9vi importer test room']);
+
+        $this->withToken($this->token(['pilos.rooms.read']))
+            ->getJson(route('api.integration.v1.rooms.index'))
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.id', (string) $room->id)
+            ->assertJsonPath('data.0.name', 'Saa9vi importer test room')
+            ->assertJsonPath('data.0.owner_id', $room->user_id)
+            ->assertJsonMissingPath('data.0.access_code')
+            ->assertJsonMissingPath('data.0.owner_email');
+    }
+
+    public function test_meeting_history_returns_only_completed_meetings(): void
+    {
+        $room = Room::factory()->create();
+        $completed = Meeting::factory()->create([
+            'room_id' => $room->id,
+            'start' => now()->subHour(),
+            'end' => now()->subMinutes(30),
+        ]);
+        Meeting::factory()->create([
+            'room_id' => $room->id,
+            'start' => now()->subMinutes(10),
+            'end' => null,
+        ]);
+
+        $this->withToken($this->token(['pilos.meetings.read']))
+            ->getJson(route('api.integration.v1.rooms.meetings', ['room' => $room->id]))
+            ->assertSuccessful()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', (string) $completed->id)
+            ->assertJsonPath('data.0.room_id', (string) $room->id);
+    }
+
+    public function test_attendance_endpoint_returns_aggregate_seconds_without_personal_data(): void
+    {
+        $meeting = Meeting::factory()->create([
+            'record_attendance' => true,
+            'start' => now()->subHour(),
+            'end' => now(),
+        ]);
+
+        $meeting->attendees()->create([
+            'user_id' => $this->integrationUser->id,
+            'session_id' => null,
+            'join' => now()->subMinutes(15),
+            'leave' => now()->subMinutes(5),
+        ]);
+        $meeting->attendees()->create([
+            'user_id' => null,
+            'session_id' => 'guest-session-test-1',
+            'join' => now()->subMinutes(5),
+            'leave' => now(),
+        ]);
+
+        $this->withToken($this->token(['pilos.attendance.read']))
+            ->getJson(route('api.integration.v1.meetings.attendance', ['meeting' => $meeting->id]))
+            ->assertSuccessful()
+            ->assertJsonPath('data.meeting_id', (string) $meeting->id)
+            ->assertJsonPath('data.participant_count', 2)
+            ->assertJsonPath('data.attendee_seconds', 900)
+            ->assertJsonMissingPath('data.name')
+            ->assertJsonMissingPath('data.email')
+            ->assertJsonMissingPath('data.sessions');
+    }
+
+public function test_account_without_integration_permission_is_rejected(): void
+{
+    $user = User::factory()->create();
+
+    $token = $user->createToken(
+        'unauthorized-test',
+        ['pilos.rooms.read'],
+        now()->addHour()
+    )->plainTextToken;
+
+    $this->withToken($token)
+        ->getJson(route('api.integration.v1.rooms.index'))
+        ->assertForbidden();
+}
+
+public function test_multiple_sessions_for_one_user_count_once_and_sum_duration(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $participant = User::factory()->create();
+
+    $meeting->attendees()->create([
+        'user_id' => $participant->id,
+        'session_id' => null,
+        'join' => now()->subMinutes(30),
+        'leave' => now()->subMinutes(20),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => $participant->id,
+        'session_id' => null,
+        'join' => now()->subMinutes(10),
+        'leave' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.participant_count', 1)
+        ->assertJsonPath('data.attendee_seconds', 1200);
+}
+
+public function test_attendance_with_missing_leave_time_is_rejected(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => $this->integrationUser->id,
+        'session_id' => null,
+        'join' => now()->subMinutes(10),
+        'leave' => null,
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertStatus(409);
+}
+
+public function test_attendance_without_stable_identity_is_rejected(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => null,
+        'session_id' => null,
+        'join' => now()->subMinutes(10),
+        'leave' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertStatus(409);
+}
+
+public function test_attendance_disabled_for_meeting_is_rejected(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => false,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertStatus(470);
+}
+
+public function test_attendance_for_meeting_that_has_not_ended_is_rejected(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => true,
+        'start' => now()->subMinutes(10),
+        'end' => null,
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertStatus(469);
+}
+
+public function test_statistics_for_meeting_that_has_not_ended_are_rejected(): void
+{
+    $meeting = Meeting::factory()->create([
+        'start' => now()->subMinutes(10),
+        'end' => null,
+    ]);
+
+    $this->withToken($this->token(['pilos.statistics.read']))
+        ->getJson(route('api.integration.v1.meetings.statistics', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertStatus(409);
+}
+
+}

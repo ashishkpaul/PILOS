@@ -14,6 +14,7 @@ use App\Http\Middleware\PreventRequestForgery;
 use App\Http\Middleware\PreventRequestsDuringMaintenance;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\RequestMetricsMiddleware;
+use App\Http\Middleware\RequirePilosIntegrationToken;
 use App\Http\Middleware\RobotsHeader;
 use App\Http\Middleware\RoomAuthenticate;
 use App\Http\Middleware\RouteEnableIfConfig;
@@ -113,5 +114,6 @@ class Kernel extends HttpKernel
         'check.stale' => EnsureModelNotStale::class,
         'enable_if_config' => RouteEnableIfConfig::class,
         'shibboleth' => ShibbolethSessionMiddleware::class,
+        'pilos.integration' => RequirePilosIntegrationToken::class,
     ];
 }

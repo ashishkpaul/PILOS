@@ -46,3 +46,6 @@ CLAUDE.md
 
 
 chrome
+
+# Local integration-test environment
+.env.testing.integration

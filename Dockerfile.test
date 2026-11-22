@@ -1,0 +1,20 @@
+FROM pilos/pilos:saa9vi-4.20.0-int2
+
+USER root
+
+WORKDIR /var/www/html
+
+COPY --chown=www-data:www-data \
+  app/Http/Controllers/api/integration/v1/PilosUsageController.php \
+  ./app/Http/Controllers/api/integration/v1/PilosUsageController.php
+
+# Include PHPUnit configuration and feature tests.
+COPY --chown=www-data:www-data phpunit.xml ./phpunit.xml
+COPY --chown=www-data:www-data tests/ ./tests/
+
+# Install development dependencies for PHPUnit.
+RUN su-exec www-data composer install \
+    --prefer-dist \
+    --no-interaction
+
+USER www-data

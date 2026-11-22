@@ -27,6 +27,7 @@ class RolesAndPermissionsSeeder extends Seeder
             Permission::firstOrCreate(['name' => 'rooms.create'])->id,
             Permission::firstOrCreate(['name' => 'rooms.viewAll'])->id,
             Permission::firstOrCreate(['name' => 'rooms.manage'])->id,
+            Permission::firstOrCreate(['name' => 'pilos.integration.viewUsage'])->id,
 
             Permission::firstOrCreate(['name' => 'meetings.viewAny'])->id,
 
