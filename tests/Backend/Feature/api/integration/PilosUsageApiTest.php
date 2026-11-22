@@ -587,4 +587,214 @@ public function test_statistics_for_unknown_meeting_returns_not_found(): void
         ->assertNotFound();
 }
 
+public function test_meetings_list_attendance_data_status_disabled(): void
+{
+    $room = Room::factory()->create();
+    $meeting = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'record_attendance' => false,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.attendance_data_status', 'DISABLED')
+        ->assertJsonPath('data.0.attendance_available', false);
+}
+
+public function test_meetings_list_attendance_data_status_empty(): void
+{
+    $room = Room::factory()->create();
+    $meeting = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.attendance_data_status', 'EMPTY')
+        ->assertJsonPath('data.0.attendance_available', false);
+}
+
+public function test_meetings_list_attendance_data_status_available(): void
+{
+    $room = Room::factory()->create();
+    $meeting = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => $this->integrationUser->id,
+        'session_id' => null,
+        'join' => now()->subMinutes(30),
+        'leave' => now()->subMinutes(10),
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.attendance_data_status', 'AVAILABLE')
+        ->assertJsonPath('data.0.attendance_available', true);
+}
+
+public function test_meetings_list_attendance_data_status_incomplete_missing_leave(): void
+{
+    $room = Room::factory()->create();
+    $meeting = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => $this->integrationUser->id,
+        'session_id' => null,
+        'join' => now()->subMinutes(30),
+        'leave' => null,
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.attendance_data_status', 'INCOMPLETE')
+        ->assertJsonPath('data.0.attendance_available', false);
+}
+
+public function test_meetings_list_attendance_data_status_incomplete_missing_identity(): void
+{
+    $room = Room::factory()->create();
+    $meeting = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => null,
+        'session_id' => null,
+        'join' => now()->subMinutes(30),
+        'leave' => now()->subMinutes(10),
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.attendance_data_status', 'INCOMPLETE')
+        ->assertJsonPath('data.0.attendance_available', false);
+}
+
+public function test_meetings_list_attendance_data_status_incomplete_reversed_interval(): void
+{
+    $room = Room::factory()->create();
+    $meeting = Meeting::factory()->create([
+        'room_id' => $room->id,
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => $this->integrationUser->id,
+        'session_id' => null,
+        'join' => now()->subMinutes(10),
+        'leave' => now()->subMinutes(30),
+    ]);
+
+    $this->withToken($this->token(['pilos.meetings.read']))
+        ->getJson(route('api.integration.v1.rooms.meetings', [
+            'room' => $room->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.0.attendance_data_status', 'INCOMPLETE')
+        ->assertJsonPath('data.0.attendance_available', false);
+}
+
+public function test_attendance_endpoint_no_rows_returns_empty(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.attendance_data_status', 'EMPTY')
+        ->assertJsonPath('data.attendance_available', false)
+        ->assertJsonPath('data.participant_count', 0)
+        ->assertJsonPath('data.attendee_seconds', 0);
+}
+
+public function test_attendance_endpoint_reversed_interval_rejected(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $meeting->attendees()->create([
+        'user_id' => $this->integrationUser->id,
+        'session_id' => null,
+        'join' => now()->subMinutes(10),
+        'leave' => now()->subMinutes(30),
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertStatus(409);
+}
+
+public function test_attendance_endpoint_equal_join_leave_returns_zero_seconds(): void
+{
+    $meeting = Meeting::factory()->create([
+        'record_attendance' => true,
+        'start' => now()->subHour(),
+        'end' => now(),
+    ]);
+
+    $now = now();
+    $meeting->attendees()->create([
+        'user_id' => $this->integrationUser->id,
+        'session_id' => null,
+        'join' => $now,
+        'leave' => $now,
+    ]);
+
+    $this->withToken($this->token(['pilos.attendance.read']))
+        ->getJson(route('api.integration.v1.meetings.attendance', [
+            'meeting' => $meeting->id,
+        ]))
+        ->assertSuccessful()
+        ->assertJsonPath('data.attendance_data_status', 'AVAILABLE')
+        ->assertJsonPath('data.attendance_available', true)
+        ->assertJsonPath('data.participant_count', 1)
+        ->assertJsonPath('data.attendee_seconds', 0);
+}
+
 }

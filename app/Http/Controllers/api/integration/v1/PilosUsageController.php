@@ -11,6 +11,7 @@ use App\Models\MeetingAttendee;
 use App\Models\Room;
 use App\Settings\GeneralSettings;
 use App\Settings\RecordingSettings;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -63,7 +64,20 @@ class PilosUsageController extends Controller
         $paginator = $room->meetings()
             ->whereNotNull('start')
             ->whereNotNull('end')
-            ->withCount(['attendees', 'stats'])
+            ->withCount([
+                'attendees',
+                'stats',
+                'attendees as invalid_attendees_count' => function (Builder $query) {
+                    $query->where(function (Builder $query) {
+                        $query->whereNull('leave')
+                            ->orWhere(function (Builder $query) {
+                                $query->whereNull('user_id')
+                                    ->whereNull('session_id');
+                            })
+                            ->orWhereColumn('leave', '<', 'join');
+                    });
+                },
+            ])
             ->orderBy('start', $direction)
             ->orderBy('id', $direction)
             ->paginate($perPage)
@@ -74,7 +88,20 @@ class PilosUsageController extends Controller
                 'end' => $meeting->end?->toISOString(),
                 'updated_at' => $meeting->updated_at?->toISOString(),
                 'attendance_recording_enabled' => (bool) $meeting->record_attendance,
-                'attendance_available' => (bool) $meeting->record_attendance && $meeting->attendees_count > 0,
+                'attendance_data_status' => ! $meeting->record_attendance
+                    ? 'DISABLED'
+                    : ($meeting->attendees_count === 0
+                        ? 'EMPTY'
+                        : ($meeting->invalid_attendees_count > 0
+                            ? 'INCOMPLETE'
+                            : 'AVAILABLE')),
+                'attendance_available' => ! $meeting->record_attendance
+                    ? false
+                    : ($meeting->attendees_count === 0
+                        ? false
+                        : ($meeting->invalid_attendees_count > 0
+                            ? false
+                            : true)),
                 'statistics_available' => (bool) $statisticsEnabled && $meeting->stats_count > 0,
             ]);
 
@@ -101,27 +128,38 @@ class PilosUsageController extends Controller
             abort(409, 'Attendance records are incomplete because one or more attendee sessions have no leave time.');
         }
 
-$participantKeys = $attendees->map(function (MeetingAttendee $attendee): ?string {
-    if ($attendee->user_id !== null) {
-        return 'user:'.$attendee->user_id;
-    }
+        if ($attendees->contains(fn (MeetingAttendee $attendee): bool => $attendee->leave < $attendee->join)) {
+            abort(409, 'Attendance records contain an invalid interval because one or more attendee sessions have a leave time before the join time.');
+        }
 
-    if ($attendee->session_id !== null) {
-        return 'guest:'.$attendee->session_id;
-    }
+        $participantKeys = $attendees->map(function (MeetingAttendee $attendee): ?string {
+            if ($attendee->user_id !== null) {
+                return 'user:'.$attendee->user_id;
+            }
 
-    return null;
-});
+            if ($attendee->session_id !== null) {
+                return 'guest:'.$attendee->session_id;
+            }
 
-if ($participantKeys->contains(fn (?string $key): bool => $key === null)) {
-    abort(409, 'Attendance records contain an attendee without a stable PILOS identity key.');
-}
+            return null;
+        });
 
-$participantKeys = $participantKeys->unique();
+        if ($participantKeys->contains(fn (?string $key): bool => $key === null)) {
+            abort(409, 'Attendance records contain an attendee without a stable PILOS identity key.');
+        }
+
+        $participantKeys = $participantKeys->unique();
 
         $attendeeSeconds = (int) round($attendees->sum(
-            fn (MeetingAttendee $attendee): float => max(0, $attendee->join->diffInSeconds($attendee->leave))
+            fn (MeetingAttendee $attendee): float => $attendee->leave->getTimestamp()
+                - $attendee->join->getTimestamp()
         ));
+
+        $attendanceDataStatus = ! $meeting->record_attendance
+            ? 'DISABLED'
+            : ($attendees->count() === 0
+                ? 'EMPTY'
+                : 'AVAILABLE');
 
         return response()->json([
             'data' => [
@@ -129,7 +167,8 @@ $participantKeys = $participantKeys->unique();
                 'room_id' => (string) $meeting->room_id,
                 'start' => $meeting->start?->toISOString(),
                 'end' => $meeting->end?->toISOString(),
-                'attendance_available' => $attendees->isNotEmpty(),
+                'attendance_data_status' => $attendanceDataStatus,
+                'attendance_available' => $attendanceDataStatus === 'AVAILABLE',
                 'participant_count' => $participantKeys->count(),
                 'attendee_seconds' => $attendeeSeconds,
             ],
