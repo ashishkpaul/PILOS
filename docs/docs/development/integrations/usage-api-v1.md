@@ -73,7 +73,7 @@ Returns rooms using only the identifiers and labels needed for room-to-channel b
 | Parameter | Type | Default | Constraints |
 | --- | --- | --- | --- |
 | `page` | integer | 1 | Min 1 |
-| `per_page` | integer | 20 | Min 1, max 20 |
+| `per_page` | integer | `general.pagination_page_size` (see note below) | Min 1, max 20 |
 
 **Response (200):**
 
@@ -114,7 +114,7 @@ Returns completed meeting history for one room. Only meetings with both a `start
 | Parameter | Type | Default | Constraints |
 | --- | --- | --- | --- |
 | `page` | integer | 1 | Min 1 |
-| `per_page` | integer | 20 | Min 1, max 20 |
+| `per_page` | integer | `general.pagination_page_size` (see note below) | Min 1, max 20 |
 | `sort_direction` | string | `desc` | `asc` or `desc` |
 
 **Response (200):**
@@ -149,7 +149,7 @@ Meeting records are sorted by `start` timestamp (descending by default), with `i
 
 `GET /api/integration/v1/meetings/{meeting}/attendance`
 
-Returns an aggregate of recorded attendee time for a meeting. Personal identifiers and per-attendee session details remain inside PILOS.
+Returns an aggregate of recorded attendee time for a completed meeting. Personal identifiers and per-attendee session details remain inside PILOS.
 
 **Path parameters:**
 
@@ -158,6 +158,8 @@ Returns an aggregate of recorded attendee time for a meeting. Personal identifie
 | `meeting` | UUID | PILOS meeting identifier |
 
 **Response (200):**
+
+A successful response is returned only when `attendance_data_status` is `EMPTY` or `AVAILABLE`. A zero-length session (`leave` equals `join`) is valid and contributes zero seconds, so `attendee_seconds` can legitimately be `0` for a meeting that had attendees.
 
 ```json
 {
@@ -168,15 +170,22 @@ Returns an aggregate of recorded attendee time for a meeting. Personal identifie
     "end": "2026-11-22T10:00:00+00:00",
     "attendance_data_status": "AVAILABLE",
     "attendance_available": true,
-    "participant_count": 1,
-    "attendee_seconds": 0
+    "participant_count": 3,
+    "attendee_seconds": 7200
   }
 }
 ```
 
-**Response (404):** Unknown meeting.
+**Error responses:**
 
-**Response (409):** Attendance recording disabled (custom 470), meeting not ended (custom 469), incomplete attendance records, or missing stable identity key.
+| Status | Condition |
+| --- | --- |
+| 404 | Unknown meeting |
+| 409 | Incomplete attendance records (a row is missing `leave`, or has no stable identity key) |
+| 469 | Meeting has not ended yet |
+| 470 | Attendance recording is disabled for this meeting |
+
+Clients must not expect a response body with `attendance_data_status` of `DISABLED` or `INCOMPLETE` from this endpoint. Those states are rejected with 470 and 409. Use the meetings list endpoint to see all four statuses before requesting attendance.
 
 ### Get meeting statistics
 
@@ -264,6 +273,8 @@ Both list endpoints (`rooms` and `rooms/{room}/meetings`) use Laravel's paginato
 
 Requests for a page beyond the final page return 200 with an empty `data` array.
 
+**Default page size:** The default `per_page` value is taken from the `general.pagination_page_size` setting and clamped to the range 1 to 20. The maximum page size is always 20.
+
 ## Error responses
 
 PILOS intentionally returns custom status codes for some business conditions, not standard HTTP codes:
@@ -304,4 +315,3 @@ Recommended importer behavior:
 ## Architecture boundary
 
 The current attendance contract does not provide attendee roles or stable human identities. Therefore, attendee counts or seconds cannot yet distinguish billable students from trainers, moderators, or guests. That billing policy and the data needed to enforce it must be settled before mapping PILOS usage into Saa9vi's billing ledger.
-The default page size is 20, which is also the maximum. The default can be adjusted via the `general.pagination_page_size` setting (clamped between 1 and 20).
