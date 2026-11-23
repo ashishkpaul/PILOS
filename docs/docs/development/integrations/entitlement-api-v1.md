@@ -42,10 +42,10 @@ The entitlement write token should be separate from the read-only usage-import t
 Create these reserved PILOS roles before sending active entitlements:
 
 | Entitlement plan | Required PILOS role |
-| --- | --- |
-| `STARTER` | `seller-starter` |
-| `GROWTH` | `seller-growth` |
-| `PRO` | `seller-pro` |
+| ---------------- | ------------------- |
+| `STARTER`        | `seller-starter`    |
+| `GROWTH`         | `seller-growth`     |
+| `PRO`            | `seller-pro`        |
 
 These role names are reserved for Saa9vi entitlement synchronization. The endpoint replaces only these three roles and preserves all other PILOS roles.
 
@@ -77,12 +77,12 @@ Suspended entitlement:
 
 Fields:
 
-| Field | Type | Rules |
-| --- | --- | --- |
-| `external_id` | string | Required; exact OIDC subject mapped to PILOS `external_id` |
-| `status` | string | Required; `ACTIVE` or `SUSPENDED` |
-| `plan` | string/null | Required for `ACTIVE`; one of `STARTER`, `GROWTH`, `PRO`; must be null for `SUSPENDED` |
-| `version` | integer | Required; monotonically increasing per PILOS user, starting at 1 |
+| Field         | Type        | Rules                                                                                  |
+| ------------- | ----------- | -------------------------------------------------------------------------------------- |
+| `external_id` | string      | Required; exact OIDC subject mapped to PILOS `external_id`                             |
+| `status`      | string      | Required; `ACTIVE` or `SUSPENDED`                                                      |
+| `plan`        | string/null | Required for `ACTIVE`; one of `STARTER`, `GROWTH`, `PRO`; must be null for `SUSPENDED` |
+| `version`     | integer     | Required; monotonically increasing per PILOS user, starting at 1                       |
 
 ## Update semantics
 
@@ -138,13 +138,13 @@ PILOS's OIDC login role mapping remains useful for normal login synchronization,
 
 ## Error responses
 
-| Status | Condition |
-| --- | --- |
-| 401 | Unauthenticated, expired token, transient session token, or revoked token |
-| 403 | Missing entitlement-management permission or token ability; wildcard or non-expiring token |
-| 404 | No OIDC user matches `external_id` |
-| 409 | Ambiguous OIDC identity, stale/conflicting version, or required plan role is not configured |
-| 422 | Invalid request fields or inconsistent status/plan combination |
+| Status | Condition                                                                                   |
+| ------ | ------------------------------------------------------------------------------------------- |
+| 401    | Unauthenticated, expired token, transient session token, or revoked token                   |
+| 403    | Missing entitlement-management permission or token ability; wildcard or non-expiring token  |
+| 404    | No OIDC user matches `external_id`                                                          |
+| 409    | Ambiguous OIDC identity, stale/conflicting version, or required plan role is not configured |
+| 422    | Invalid request fields or inconsistent status/plan combination                              |
 
 ## Operational guidance
 

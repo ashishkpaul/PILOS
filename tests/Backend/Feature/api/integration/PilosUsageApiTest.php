@@ -147,20 +147,20 @@ class PilosUsageApiTest extends TestCase
             ->assertJsonMissingPath('data.sessions');
     }
 
-public function test_account_without_integration_permission_is_rejected(): void
-{
-    $user = User::factory()->create();
+    public function test_account_without_integration_permission_is_rejected(): void
+    {
+        $user = User::factory()->create();
 
-    $token = $user->createToken(
-        'unauthorized-test',
-        ['pilos.rooms.read'],
-        now()->addHour()
-    )->plainTextToken;
+        $token = $user->createToken(
+            'unauthorized-test',
+            ['pilos.rooms.read'],
+            now()->addHour()
+        )->plainTextToken;
 
-    $this->withToken($token)
-        ->getJson(route('api.integration.v1.rooms.index'))
-        ->assertForbidden();
-}
+        $this->withToken($token)
+            ->getJson(route('api.integration.v1.rooms.index'))
+            ->assertForbidden();
+    }
 
 public function test_multiple_sessions_for_one_user_count_once_and_sum_duration(): void
 {
