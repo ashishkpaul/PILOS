@@ -91,14 +91,20 @@ class PilosEntitlementController extends Controller
             }
 
             $planRoleMap = (array) config('services.pilos_entitlements.plan_roles', []);
-            $allowedRoleNames = array_values(array_unique(array_filter($planRoleMap, 'is_string')));
-            if (count($allowedRoleNames) !== count($planRoleMap) || $allowedRoleNames === []) {
+            $supportedPlans = ['STARTER', 'GROWTH', 'PRO'];
+            if (
+                array_diff($supportedPlans, array_keys($planRoleMap)) !== []
+                || array_diff(array_keys($planRoleMap), $supportedPlans) !== []
+                || count(array_filter($planRoleMap, 'is_string')) !== count($supportedPlans)
+                || count(array_unique(array_values($planRoleMap))) !== count($supportedPlans)
+                || in_array('', array_values($planRoleMap), true)
+            ) {
                 abort(500, 'Saa9vi plan-role mapping is not configured safely.');
             }
 
+            $allowedRoleNames = array_values($planRoleMap);
             $planRoles = Role::query()->whereIn('name', $allowedRoleNames)->get();
-            $configuredRoleNames = $planRoles->pluck('name')->all();
-            if (count($configuredRoleNames) !== count($allowedRoleNames)) {
+            if ($planRoles->count() !== count($allowedRoleNames)) {
                 abort(409, 'One or more required Saa9vi plan roles are not configured in PILOS.');
             }
 
