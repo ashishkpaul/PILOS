@@ -892,5 +892,4 @@ class PilosUsageApiTest extends TestCase
             ->getJson(route('api.integration.v1.rooms.index'))
             ->assertStatus(403);
     }
-
 }
