@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Spatie\Image\Enums\Fit;
 use Spatie\Image\Image;
@@ -124,24 +125,28 @@ abstract class ExternalUser
      */
     public function syncWithEloquentModel(User $eloquentUser, array $roles): User
     {
-        // Validate attributes
+        // Validate claims before opening the transaction; invalid claims do not write.
         $this->validate();
 
-        // Sync attributes
-        $eloquentUser->firstname = $this->getFirstAttributeValue('first_name');
-        $eloquentUser->lastname = $this->getFirstAttributeValue('last_name');
-        $eloquentUser->email = $this->getFirstAttributeValue('email');
+        return DB::transaction(function () use ($eloquentUser, $roles): User {
+            // Serialize OIDC synchronization with entitlement writes on the user row.
+            if ($eloquentUser->exists) {
+                $eloquentUser = User::query()
+                    ->whereKey($eloquentUser->getKey())
+                    ->lockForUpdate()
+                    ->firstOrFail();
+            }
 
-        // Save/update user
-        $eloquentUser->save();
+            $eloquentUser->firstname = $this->getFirstAttributeValue('first_name');
+            $eloquentUser->lastname = $this->getFirstAttributeValue('last_name');
+            $eloquentUser->email = $this->getFirstAttributeValue('email');
+            $eloquentUser->save();
 
-        // Sync profile image
-        $this->syncImage($eloquentUser);
+            $this->syncImage($eloquentUser);
+            $this->mapRoles($eloquentUser, $roles);
 
-        // Map roles
-        $this->mapRoles($eloquentUser, $roles);
-
-        return $eloquentUser;
+            return $eloquentUser;
+        });
     }
 
     /**
