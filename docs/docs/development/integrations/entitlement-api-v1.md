@@ -39,7 +39,7 @@ The entitlement write token should be separate from the read-only usage-import t
 
 `external_id` is matched only against PILOS users whose `authenticator` is `oidc`. It must contain the immutable OIDC subject (`sub`) mapped to PILOS's `external_id` attribute. Email addresses must not be used for this lookup.
 
-Create these reserved PILOS roles before sending active entitlements:
+Configure role names using `PILOS_ROLE_STARTER`, `PILOS_ROLE_GROWTH`, and `PILOS_ROLE_PRO` (defaults shown below). The endpoint may modify only the roles in this explicit map. Create these reserved PILOS roles before sending active entitlements:
 
 | Entitlement plan | Required PILOS role |
 | ---------------- | ------------------- |
@@ -86,13 +86,13 @@ Fields:
 
 ## Update semantics
 
-1. The endpoint resolves exactly one OIDC user using `authenticator = oidc` and `external_id`. No match returns 404; ambiguous matches return 409.
+1. The endpoint resolves exactly one OIDC user using `authenticator = oidc` and `external_id`. No match returns HTTP 200 with `status=NOOP` and `reason=OIDC_USER_NOT_CREATED`; Keycloak supplies the current plan claim on first login. Vendure must also reconcile or resend the latest entitlement after the first login, because a no-op does not persist a version in PILOS. Ambiguous matches return 409.
 2. A version lower than the stored version returns 409 and makes no change.
 3. Reusing the current version with a different status or plan returns 409.
 4. Repeating the current version with the same status and plan is accepted and re-applies the managed role state. This makes retries safe if a previous caller timed out after the database transaction committed.
-5. A newer `ACTIVE` update clears `suspended_at`, stores the plan, and replaces any existing Saa9vi plan role with the selected plan role.
+5. A newer `ACTIVE` update clears `suspended_at`, stores the plan, and replaces any existing Saa9vi plan role with the selected plan role and marks the role association `automatic=true`.
 6. A newer `SUSPENDED` update sets `suspended_at`, clears the plan, and removes all Saa9vi plan roles.
-7. All database updates and managed-role changes run in one transaction.
+7. All database updates and managed-role changes run in one transaction. OIDC login attribute and role synchronization takes the same user-row lock so the writers serialize for existing users.
 
 The version must be incremented by the Vendure entitlement source whenever the authoritative status or plan changes. Reuse the same version for retries of the same event. Do not generate a new version for a transport retry.
 
@@ -142,7 +142,7 @@ PILOS's OIDC login role mapping remains useful for normal login synchronization,
 | ------ | ------------------------------------------------------------------------------------------- |
 | 401    | Unauthenticated, expired token, transient session token, or revoked token                   |
 | 403    | Missing entitlement-management permission or token ability; wildcard or non-expiring token  |
-| 404    | No OIDC user matches `external_id`                                                          |
+| 200    | No OIDC user exists yet; response is a successful `NOOP` for first-login provisioning      |
 | 409    | Ambiguous OIDC identity, stale/conflicting version, or required plan role is not configured |
 | 422    | Invalid request fields or inconsistent status/plan combination                              |
 

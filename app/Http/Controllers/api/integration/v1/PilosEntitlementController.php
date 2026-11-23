@@ -20,18 +20,12 @@ use Illuminate\Validation\ValidationException;
  */
 class PilosEntitlementController extends Controller
 {
-    private const PLAN_ROLES = [
-        'STARTER' => 'seller-starter',
-        'GROWTH' => 'seller-growth',
-        'PRO' => 'seller-pro',
-    ];
-
     public function update(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'external_id' => ['required', 'string', 'max:255'],
             'status' => ['required', Rule::in(['ACTIVE', 'SUSPENDED'])],
-            'plan' => ['nullable', 'string', Rule::in(array_keys(self::PLAN_ROLES))],
+            'plan' => ['present', 'nullable', 'string', Rule::in(['STARTER', 'GROWTH', 'PRO'])],
             'version' => ['required', 'integer', 'min:1'],
         ]);
 
@@ -58,19 +52,28 @@ class PilosEntitlementController extends Controller
             $matches = User::query()
                 ->where('authenticator', 'oidc')
                 ->where('external_id', $validated['external_id'])
-                ->lockForUpdate()
+                ->limit(2)
                 ->get();
 
             if ($matches->isEmpty()) {
-                abort(404, 'No OIDC user matches the supplied external_id.');
+                // An entitlement can precede the first PILOS login. Keycloak
+                // supplies the authoritative plan claim when the user appears.
+                return response()->json([
+                    'data' => [
+                        'status' => 'NOOP',
+                        'reason' => 'OIDC_USER_NOT_CREATED',
+                    ],
+                ]);
             }
 
             if ($matches->count() !== 1) {
                 abort(409, 'The supplied external_id matches more than one OIDC user.');
             }
 
+            /** @var User $candidate */
+            $candidate = $matches->first();
             /** @var User $user */
-            $user = $matches->first();
+            $user = User::query()->whereKey($candidate->getKey())->lockForUpdate()->firstOrFail();
             $currentVersion = (int) $user->entitlement_version;
 
             if ($version < $currentVersion) {
@@ -87,13 +90,27 @@ class PilosEntitlementController extends Controller
                 }
             }
 
-            $planRoles = Role::query()
-                ->whereIn('name', array_values(self::PLAN_ROLES))
-                ->get();
+            $planRoleMap = (array) config('services.pilos_entitlements.plan_roles', []);
+            $supportedPlans = ['STARTER', 'GROWTH', 'PRO'];
+            if (
+                array_diff($supportedPlans, array_keys($planRoleMap)) !== []
+                || array_diff(array_keys($planRoleMap), $supportedPlans) !== []
+                || count(array_filter($planRoleMap, 'is_string')) !== count($supportedPlans)
+                || count(array_unique(array_values($planRoleMap))) !== count($supportedPlans)
+                || in_array('', array_values($planRoleMap), true)
+            ) {
+                abort(500, 'Saa9vi plan-role mapping is not configured safely.');
+            }
+
+            $allowedRoleNames = array_values($planRoleMap);
+            $planRoles = Role::query()->whereIn('name', $allowedRoleNames)->get();
+            if ($planRoles->count() !== count($allowedRoleNames)) {
+                abort(409, 'One or more required Saa9vi plan roles are not configured in PILOS.');
+            }
 
             $targetRole = null;
             if ($status === 'ACTIVE') {
-                $targetRoleName = self::PLAN_ROLES[$plan];
+                $targetRoleName = $planRoleMap[$plan];
                 $targetRole = $planRoles->firstWhere('name', $targetRoleName);
 
                 if ($targetRole === null) {

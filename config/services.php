@@ -51,6 +51,15 @@ return [
         'logout' => env('SHIBBOLETH_LOGOUT_URL', '/Shibboleth.sso/Logout'),
     ],
 
+    // Reserved roles the Saa9vi entitlement endpoint is allowed to manage.
+    'pilos_entitlements' => [
+        'plan_roles' => [
+            'STARTER' => env('PILOS_ROLE_STARTER', 'seller-starter'),
+            'GROWTH' => env('PILOS_ROLE_GROWTH', 'seller-growth'),
+            'PRO' => env('PILOS_ROLE_PRO', 'seller-pro'),
+        ],
+    ],
+
     'oidc' => [
         'enabled' => $oidcEnabled,
         'issuer' => env('OIDC_ISSUER'),
