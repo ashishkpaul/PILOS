@@ -146,6 +146,7 @@ class PilosEntitlementApiTest extends TestCase
         $this->assertNotContains('seller-growth', $roleNames);
         $this->assertNotContains('seller-pro', $roleNames);
         $this->assertContains('Tenant support', $roleNames);
+        $this->assertTrue((bool) $user->roles()->where('name', 'seller-starter')->firstOrFail()->pivot->automatic);
         $this->assertTrue($user->entitlement_managed);
         $this->assertNull($user->suspended_at);
         $this->assertSame('STARTER', $user->entitlement_plan);
@@ -257,14 +258,15 @@ class PilosEntitlementApiTest extends TestCase
         $this->assertSame(9, $user->entitlement_version);
     }
 
-    public function test_missing_oidc_user_returns_not_found(): void
+    public function test_missing_oidc_user_returns_successful_noop_before_first_login(): void
     {
         $this->putEntitlement([
             'external_id' => 'unknown-subject',
-            'status' => 'SUSPENDED',
-            'plan' => null,
+            'status' => 'ACTIVE',
+            'plan' => 'STARTER',
             'version' => 1,
-        ])->assertNotFound();
+        ])->assertOk()->assertJsonPath('data.status', 'NOOP')
+            ->assertJsonPath('data.reason', 'OIDC_USER_NOT_CREATED');
     }
 
     public function test_local_user_is_not_matched_by_external_id(): void
