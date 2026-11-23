@@ -61,6 +61,7 @@ return [
         'room_limit_exceeded' => 'Raumerstellung fehlgeschlagen! Sie haben die max. Anzahl an Räumen erreicht.',
         'room_start' => 'Starten fehlgeschlagen! Der Raum konnte nicht gestartet werden.',
         'room_type_invalid' => 'Die Art des Raumes ist für bestimmte Benutzergruppen eingeschränkt. Wenn Sie der Beistzer des Raumes sind, ändern Sie bitte die Raumart, damit der Raum gestartet werden kann.',
+        'subscription_inactive' => 'Ihr Saa9vi-Abonnement ist nicht aktiv. Bitte verlängern Sie Ihr Abonnement in Vendure, um neue Meetings zu starten.',
         'server_delete_failed' => 'Der Server konnte nicht gelöscht werden. Um den Server zu löschen, muss dieser deaktivert werden und es dürfen keine Meetings laufen.',
         'server_pool_delete_failed' => 'Der Serverpool konnte nicht gelöscht werden. Um den Serverpool zu löschen, darf dieser von keiner Raumart verwendet werden.',
         'stale_error' => 'Änderungskonflikt',

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Read-only usage integration API for importing room, meeting, and attendance aggregates
+- Entitlement synchronization API to revoke or replace Saa9vi plan access independently of OIDC login
 
 ### Security
 

@@ -66,6 +66,7 @@ class RoomResource extends JsonResource
             'can_start' => Gate::inspect('start', [$this->resource])->allowed(),
             'access_code' => $this->when(Gate::inspect('viewAccessCode', [$this->resource])->allowed(), $this->access_code),
             'room_type_invalid' => $this->roomTypeInvalid,
+            'subscription_inactive' => $this->owner->entitlement_managed && ($this->owner->suspended_at !== null || $this->owner->entitlement_plan === null),
             'current_user' => new UserResource(Auth::user())->withPermissions()->withoutRoles(),
         ];
     }
