@@ -96,12 +96,11 @@ class PilosEntitlementController extends Controller
                 abort(500, 'Saa9vi plan-role mapping is not configured safely.');
             }
 
-            $configuredRoleCount = Role::query()->whereIn('name', $allowedRoleNames)->count();
-            if ($configuredRoleCount !== count($allowedRoleNames)) {
+            $planRoles = Role::query()->whereIn('name', $allowedRoleNames)->get();
+            $configuredRoleNames = $planRoles->pluck('name')->all();
+            if (count($configuredRoleNames) !== count($allowedRoleNames)) {
                 abort(409, 'One or more required Saa9vi plan roles are not configured in PILOS.');
             }
-
-            $planRoles = Role::query()->whereIn('name', $allowedRoleNames)->get();
 
             $targetRole = null;
             if ($status === 'ACTIVE') {
