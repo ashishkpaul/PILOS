@@ -25,7 +25,7 @@ class PilosEntitlementController extends Controller
         $validated = $request->validate([
             'external_id' => ['required', 'string', 'max:255'],
             'status' => ['required', Rule::in(['ACTIVE', 'SUSPENDED'])],
-            'plan' => ['present', 'nullable', 'string', Rule::in(array_keys((array) config('services.pilos_entitlements.plan_roles', [])))],
+            'plan' => ['present', 'nullable', 'string', Rule::in(['STARTER', 'GROWTH', 'PRO'])],
             'version' => ['required', 'integer', 'min:1'],
         ]);
 
