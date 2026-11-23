@@ -142,7 +142,7 @@ PILOS's OIDC login role mapping remains useful for normal login synchronization,
 | ------ | ------------------------------------------------------------------------------------------- |
 | 401    | Unauthenticated, expired token, transient session token, or revoked token                   |
 | 403    | Missing entitlement-management permission or token ability; wildcard or non-expiring token  |
-| 404    | No OIDC user matches `external_id`                                                          |
+| 200    | No OIDC user exists yet; response is a successful `NOOP` for first-login provisioning      |
 | 409    | Ambiguous OIDC identity, stale/conflicting version, or required plan role is not configured |
 | 422    | Invalid request fields or inconsistent status/plan combination                              |
 
