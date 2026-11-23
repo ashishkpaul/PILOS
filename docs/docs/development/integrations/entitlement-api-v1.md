@@ -86,7 +86,7 @@ Fields:
 
 ## Update semantics
 
-1. The endpoint resolves exactly one OIDC user using `authenticator = oidc` and `external_id`. No match returns HTTP 200 with `status=NOOP` and `reason=OIDC_USER_NOT_CREATED`; Keycloak supplies the current plan claim on first login. Ambiguous matches return 409.
+1. The endpoint resolves exactly one OIDC user using `authenticator = oidc` and `external_id`. No match returns HTTP 200 with `status=NOOP` and `reason=OIDC_USER_NOT_CREATED`; Keycloak supplies the current plan claim on first login. Vendure must also reconcile or resend the latest entitlement after the first login, because a no-op does not persist a version in PILOS. Ambiguous matches return 409.
 2. A version lower than the stored version returns 409 and makes no change.
 3. Reusing the current version with a different status or plan returns 409.
 4. Repeating the current version with the same status and plan is accepted and re-applies the managed role state. This makes retries safe if a previous caller timed out after the database transaction committed.
