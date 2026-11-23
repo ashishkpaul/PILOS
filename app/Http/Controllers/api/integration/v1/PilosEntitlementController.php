@@ -1,0 +1,139 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers\api\integration\v1;
+
+use App\Http\Controllers\Controller;
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * Authoritative, idempotent entitlement synchronization for Saa9vi-managed
+ * PILOS users. The OIDC subject is resolved through the configured external_id
+ * mapping; email addresses are deliberately not used as identifiers.
+ */
+class PilosEntitlementController extends Controller
+{
+    private const PLAN_ROLES = [
+        'STARTER' => 'seller-starter',
+        'GROWTH' => 'seller-growth',
+        'PRO' => 'seller-pro',
+    ];
+
+    public function update(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'external_id' => ['required', 'string', 'max:255'],
+            'status' => ['required', Rule::in(['ACTIVE', 'SUSPENDED'])],
+            'plan' => ['nullable', 'string', Rule::in(array_keys(self::PLAN_ROLES))],
+            'version' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $status = $validated['status'];
+        $plan = $validated['plan'] ?? null;
+        $version = (int) $validated['version'];
+
+        if ($status === 'ACTIVE' && $plan === null) {
+            throw ValidationException::withMessages([
+                'plan' => 'An active entitlement requires a plan.',
+            ]);
+        }
+
+        if ($status === 'SUSPENDED' && $plan !== null) {
+            throw ValidationException::withMessages([
+                'plan' => 'A suspended entitlement must not include a plan.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($validated, $status, $plan, $version): JsonResponse {
+            // external_id is unique for the configured OIDC issuer in normal
+            // operation, but the schema's composite unique key does not enforce
+            // that invariant. Fail closed if the mapping is ambiguous.
+            $matches = User::query()
+                ->where('authenticator', 'oidc')
+                ->where('external_id', $validated['external_id'])
+                ->lockForUpdate()
+                ->get();
+
+            if ($matches->isEmpty()) {
+                abort(404, 'No OIDC user matches the supplied external_id.');
+            }
+
+            if ($matches->count() !== 1) {
+                abort(409, 'The supplied external_id matches more than one OIDC user.');
+            }
+
+            /** @var User $user */
+            $user = $matches->first();
+            $currentVersion = (int) $user->entitlement_version;
+
+            if ($version < $currentVersion) {
+                abort(409, 'The entitlement update is older than the stored version.');
+            }
+
+            if ($version === $currentVersion && $user->entitlement_managed) {
+                $currentStatus = $user->suspended_at === null && $user->entitlement_plan !== null
+                    ? 'ACTIVE'
+                    : 'SUSPENDED';
+
+                if ($currentStatus !== $status || $user->entitlement_plan !== $plan) {
+                    abort(409, 'The entitlement version has already been used for a different state.');
+                }
+            }
+
+            $planRoles = Role::query()
+                ->whereIn('name', array_values(self::PLAN_ROLES))
+                ->get();
+
+            $targetRole = null;
+            if ($status === 'ACTIVE') {
+                $targetRoleName = self::PLAN_ROLES[$plan];
+                $targetRole = $planRoles->firstWhere('name', $targetRoleName);
+
+                if ($targetRole === null) {
+                    abort(409, 'The required Saa9vi plan role is not configured in PILOS.');
+                }
+            }
+
+            // Saa9vi plan roles are a reserved, integration-managed role set.
+            // Other manually or automatically assigned PILOS roles are preserved.
+            $user->roles()->detach($planRoles->modelKeys());
+
+            if ($targetRole !== null) {
+                $user->roles()->syncWithoutDetaching([
+                    $targetRole->id => ['automatic' => true],
+                ]);
+            }
+
+            $user->entitlement_managed = true;
+            $user->entitlement_plan = $plan;
+            $user->entitlement_version = $version;
+
+            if ($status === 'SUSPENDED') {
+                // Preserve the original timestamp on an identical retry.
+                $user->suspended_at = $user->suspended_at ?? now();
+            } else {
+                $user->suspended_at = null;
+            }
+
+            $user->save();
+
+            return response()->json([
+                'data' => [
+                    'pilos_user_id' => $user->id,
+                    'status' => $status,
+                    'plan' => $user->entitlement_plan,
+                    'version' => $user->entitlement_version,
+                    'entitlement_managed' => $user->entitlement_managed,
+                    'suspended_at' => $user->suspended_at?->toISOString(),
+                ],
+            ]);
+        });
+    }
+}

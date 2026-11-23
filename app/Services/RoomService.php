@@ -53,6 +53,17 @@ class RoomService
 
             // No running meeting found, or the meeting is detached
             Log::info('Room {room} not running, creating a new meeting', ['room' => $this->room->getLogLabel()]);
+
+            // A tenant entitlement is synchronized independently of OIDC login.
+            // This prevents stale role assignments from allowing a room owner
+            // whose Saa9vi subscription has been suspended to start a new meeting.
+            $owner = $this->room->owner;
+            if ($owner->entitlement_managed && ($owner->suspended_at !== null || $owner->entitlement_plan === null)) {
+                $lock->release();
+                Log::warning('Failed to create meeting for room {room}; owner subscription is inactive', ['room' => $this->room->getLogLabel()]);
+                abort(CustomStatusCodes::SUBSCRIPTION_INACTIVE->value, __('app.errors.subscription_inactive'));
+            }
+
             if ($this->room->roomTypeInvalid) {
                 $lock->release();
                 Log::warning('Failed to create meeting for room {room}; invalid room type', ['room' => $this->room->getLogLabel()]);

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Auth\LDAP\LDAPController;
+use App\Http\Controllers\api\integration\v1\PilosEntitlementController;
 use App\Http\Controllers\api\integration\v1\PilosUsageController;
 use App\Http\Controllers\api\v1\ApplicationController;
 use App\Http\Controllers\api\v1\auth\ForgotPasswordController;
@@ -49,6 +50,7 @@ Route::prefix('integration/v1')
         Route::get('rooms/{room}/meetings', [PilosUsageController::class, 'meetings'])->middleware('pilos.integration:pilos.meetings.read')->name('rooms.meetings');
         Route::get('meetings/{meeting}/attendance', [PilosUsageController::class, 'attendance'])->middleware('pilos.integration:pilos.attendance.read')->name('meetings.attendance');
         Route::get('meetings/{meeting}/stats', [PilosUsageController::class, 'statistics'])->middleware('pilos.integration:pilos.statistics.read')->name('meetings.statistics');
+        Route::put('entitlements', [PilosEntitlementController::class, 'update'])->middleware('pilos.integration:pilos.entitlements.write')->name('entitlements.update');
     });
 
 Route::prefix('v1')->name('api.v1.')->group(function () {

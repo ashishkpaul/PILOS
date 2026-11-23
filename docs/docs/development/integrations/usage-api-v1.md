@@ -9,15 +9,15 @@ This document describes the read-only integration API that Saa9vi uses to import
 
 ## Overview
 
-| Property | Value |
-| --- | --- |
-| Base path | `/api/integration/v1` |
-| Authentication | Sanctum bearer token (`Authorization: Bearer <token>`) |
-| Token type | Persisted Sanctum `PersonalAccessToken` only |
-| Authorization | Dedicated `pilos.integration.viewUsage` permission plus per-endpoint abilities |
-| Token expiry | Must be a finite, future timestamp; null expiry is rejected |
-| Wildcard abilities | Rejected (`*` is not allowed) |
-| Access pattern | Read-only GET endpoints |
+| Property           | Value                                                                          |
+| ------------------ | ------------------------------------------------------------------------------ |
+| Base path          | `/api/integration/v1`                                                          |
+| Authentication     | Sanctum bearer token (`Authorization: Bearer <token>`)                         |
+| Token type         | Persisted Sanctum `PersonalAccessToken` only                                   |
+| Authorization      | Dedicated `pilos.integration.viewUsage` permission plus per-endpoint abilities |
+| Token expiry       | Must be a finite, future timestamp; null expiry is rejected                    |
+| Wildcard abilities | Rejected (`*` is not allowed)                                                  |
+| Access pattern     | Read-only GET endpoints                                                        |
 
 All routes are grouped under the `integration/v1` prefix and require Sanctum authentication. Machine-to-machine session cookies (transient tokens) are not accepted.
 
@@ -41,12 +41,12 @@ The integration middleware enforces the following checks, in order:
 
 ### Token abilities
 
-| Endpoint | Required ability |
-| --- | --- |
-| `GET /rooms` | `pilos.rooms.read` |
-| `GET /rooms/{room}/meetings` | `pilos.meetings.read` |
+| Endpoint                             | Required ability        |
+| ------------------------------------ | ----------------------- |
+| `GET /rooms`                         | `pilos.rooms.read`      |
+| `GET /rooms/{room}/meetings`         | `pilos.meetings.read`   |
 | `GET /meetings/{meeting}/attendance` | `pilos.attendance.read` |
-| `GET /meetings/{meeting}/stats` | `pilos.statistics.read` |
+| `GET /meetings/{meeting}/stats`      | `pilos.statistics.read` |
 
 ### Token provisioning (operational)
 
@@ -70,9 +70,9 @@ Returns rooms using only the identifiers and labels needed for room-to-channel b
 
 **Query parameters:**
 
-| Parameter | Type | Default | Constraints |
-| --- | --- | --- | --- |
-| `page` | integer | 1 | Min 1 |
+| Parameter  | Type    | Default                                         | Constraints   |
+| ---------- | ------- | ----------------------------------------------- | ------------- |
+| `page`     | integer | 1                                               | Min 1         |
 | `per_page` | integer | `general.pagination_page_size` (see note below) | Min 1, max 20 |
 
 **Response (200):**
@@ -96,7 +96,6 @@ Returns rooms using only the identifiers and labels needed for room-to-channel b
 }
 ```
 
-
 ### List meetings for a room
 
 `GET /api/integration/v1/rooms/{room}/meetings`
@@ -105,17 +104,17 @@ Returns completed meeting history for one room. Only meetings with both a `start
 
 **Path parameters:**
 
-| Parameter | Type | Description |
-| --- | --- | --- |
-| `room` | UUID | PILOS room identifier |
+| Parameter | Type | Description           |
+| --------- | ---- | --------------------- |
+| `room`    | UUID | PILOS room identifier |
 
 **Query parameters:**
 
-| Parameter | Type | Default | Constraints |
-| --- | --- | --- | --- |
-| `page` | integer | 1 | Min 1 |
-| `per_page` | integer | `general.pagination_page_size` (see note below) | Min 1, max 20 |
-| `sort_direction` | string | `desc` | `asc` or `desc` |
+| Parameter        | Type    | Default                                         | Constraints     |
+| ---------------- | ------- | ----------------------------------------------- | --------------- |
+| `page`           | integer | 1                                               | Min 1           |
+| `per_page`       | integer | `general.pagination_page_size` (see note below) | Min 1, max 20   |
+| `sort_direction` | string  | `desc`                                          | `asc` or `desc` |
 
 **Response (200):**
 
@@ -153,8 +152,8 @@ Returns an aggregate of recorded attendee time for a completed meeting. Personal
 
 **Path parameters:**
 
-| Parameter | Type | Description |
-| --- | --- | --- |
+| Parameter | Type | Description              |
+| --------- | ---- | ------------------------ |
 | `meeting` | UUID | PILOS meeting identifier |
 
 **Response (200):**
@@ -178,12 +177,12 @@ A successful response is returned only when `attendance_data_status` is `EMPTY` 
 
 **Error responses:**
 
-| Status | Condition |
-| --- | --- |
-| 404 | Unknown meeting |
-| 409 | Incomplete attendance records (a row is missing `leave`, or has no stable identity key) |
-| 469 | Meeting has not ended yet |
-| 470 | Attendance recording is disabled for this meeting |
+| Status | Condition                                                                               |
+| ------ | --------------------------------------------------------------------------------------- |
+| 404    | Unknown meeting                                                                         |
+| 409    | Incomplete attendance records (a row is missing `leave`, or has no stable identity key) |
+| 469    | Meeting has not ended yet                                                               |
+| 470    | Attendance recording is disabled for this meeting                                       |
 
 Clients must not expect a response body with `attendance_data_status` of `DISABLED` or `INCOMPLETE` from this endpoint. Those states are rejected with 470 and 409. Use the meetings list endpoint to see all four statuses before requesting attendance.
 
@@ -195,8 +194,8 @@ Returns meeting utilisation snapshots without participant identity. Requires the
 
 **Path parameters:**
 
-| Parameter | Type | Description |
-| --- | --- | --- |
+| Parameter | Type | Description              |
+| --------- | ---- | ------------------------ |
 | `meeting` | UUID | PILOS meeting identifier |
 
 **Response (200):**
@@ -230,17 +229,17 @@ Returns meeting utilisation snapshots without participant identity. Requires the
 
 The meetings list and attendance endpoint report attendance readiness through two fields:
 
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `attendance_data_status` | string | `DISABLED`, `EMPTY`, `AVAILABLE`, or `INCOMPLETE` |
-| `attendance_available` | boolean | `true` only when status is `AVAILABLE` |
+| Field                    | Type    | Meaning                                           |
+| ------------------------ | ------- | ------------------------------------------------- |
+| `attendance_data_status` | string  | `DISABLED`, `EMPTY`, `AVAILABLE`, or `INCOMPLETE` |
+| `attendance_available`   | boolean | `true` only when status is `AVAILABLE`            |
 
-| Status | Meaning | `attendance_available` |
-| --- | --- | --- |
-| `DISABLED` | Attendance recording is disabled for this meeting | `false` |
-| `EMPTY` | Recording enabled, but no attendee rows exist | `false` |
-| `AVAILABLE` | At least one row exists and every row is valid | `true` |
-| `INCOMPLETE` | One or more rows have invalid or incomplete data | `false` |
+| Status       | Meaning                                           | `attendance_available` |
+| ------------ | ------------------------------------------------- | ---------------------- |
+| `DISABLED`   | Attendance recording is disabled for this meeting | `false`                |
+| `EMPTY`      | Recording enabled, but no attendee rows exist     | `false`                |
+| `AVAILABLE`  | At least one row exists and every row is valid    | `true`                 |
+| `INCOMPLETE` | One or more rows have invalid or incomplete data  | `false`                |
 
 A row is invalid when any of the following holds:
 
@@ -254,22 +253,22 @@ A zero-length session (`leave` equals `join`) is valid and contributes zero seco
 
 Both list endpoints (`rooms` and `rooms/{room}/meetings`) use Laravel's paginator. The response root includes:
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `current_page` | integer | Current page number |
-| `per_page` | integer | Records per page |
-| `from` | integer | First record index on this page |
-| `to` | integer | Last record index on this page |
-| `total` | integer | Total matching records |
-| `last_page` | integer | Total number of pages |
+| Field          | Type    | Description                     |
+| -------------- | ------- | ------------------------------- |
+| `current_page` | integer | Current page number             |
+| `per_page`     | integer | Records per page                |
+| `from`         | integer | First record index on this page |
+| `to`           | integer | Last record index on this page  |
+| `total`        | integer | Total matching records          |
+| `last_page`    | integer | Total number of pages           |
 
 **Validation rules:**
 
-| Parameter | Rule | Violation response |
-| --- | --- | --- |
-| `page` | integer, min 1 | 422 |
-| `per_page` | integer, min 1, max 20 | 422 |
-| `sort_direction` (meetings only) | `asc` or `desc` | 422 |
+| Parameter                        | Rule                   | Violation response |
+| -------------------------------- | ---------------------- | ------------------ |
+| `page`                           | integer, min 1         | 422                |
+| `per_page`                       | integer, min 1, max 20 | 422                |
+| `sort_direction` (meetings only) | `asc` or `desc`        | 422                |
 
 Requests for a page beyond the final page return 200 with an empty `data` array.
 
@@ -279,17 +278,17 @@ Requests for a page beyond the final page return 200 with an empty `data` array.
 
 PILOS intentionally returns custom status codes for some business conditions, not standard HTTP codes:
 
-| Code | Condition | Endpoint(s) |
-| --- | --- | --- |
-| 401 | Unauthenticated, expired token, or revoked token | All |
-| 403 | Missing permission, missing ability, wildcard token, or null expiry | All |
-| 404 | Unknown room or meeting | Meetings list, attendance, statistics |
-| 409 | Meeting not yet ended | Statistics |
-| 409 | Incomplete attendance records (missing leave or missing identity) | Attendance |
-| 468 | Statistics feature disabled | Statistics |
-| 469 | Meeting not yet ended | Attendance |
-| 470 | Attendance recording disabled | Attendance |
-| 422 | Invalid pagination parameters | Rooms list, meetings list |
+| Code | Condition                                                           | Endpoint(s)                           |
+| ---- | ------------------------------------------------------------------- | ------------------------------------- |
+| 401  | Unauthenticated, expired token, or revoked token                    | All                                   |
+| 403  | Missing permission, missing ability, wildcard token, or null expiry | All                                   |
+| 404  | Unknown room or meeting                                             | Meetings list, attendance, statistics |
+| 409  | Meeting not yet ended                                               | Statistics                            |
+| 409  | Incomplete attendance records (missing leave or missing identity)   | Attendance                            |
+| 468  | Statistics feature disabled                                         | Statistics                            |
+| 469  | Meeting not yet ended                                               | Attendance                            |
+| 470  | Attendance recording disabled                                       | Attendance                            |
+| 422  | Invalid pagination parameters                                       | Rooms list, meetings list             |
 
 All error responses use Laravel's standard JSON validation/error format.
 

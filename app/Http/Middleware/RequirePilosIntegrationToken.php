@@ -34,7 +34,12 @@ class RequirePilosIntegrationToken
             abort(401, 'A personal access token is required.');
         }
 
-        if (! $user->hasPermission('pilos.integration.viewUsage')) {
+        $requiredPermission = match ($ability) {
+            'pilos.entitlements.write' => 'pilos.integration.manageEntitlements',
+            default => 'pilos.integration.viewUsage',
+        };
+
+        if (! $user->hasPermission($requiredPermission)) {
             abort(403, 'The PILOS integration account is not authorized.');
         }
 
